@@ -13,7 +13,6 @@ import (
 
 // Log middleware logs http requests
 type Log struct {
-	LogSuccess        bool // LogSuccess true -> log successful queries; false -> only log failed queries
 	LogRequestHeaders bool // LogRequestHeaders true -> dump http headers at debug log level
 }
 
@@ -26,15 +25,17 @@ func (l Log) Wrap(next http.Handler) http.Handler {
 			// Log headers before running 'next' in case other interceptors change the data.
 			headers, err := httputil.DumpRequest(r, false)
 			if err != nil {
-				log.Warnf("Could not dump request headers: %v", err)
+				log.Debugf("Could not dump request headers: %v", err)
 				return
 			}
 			log.Debugf("Is websocket request: %v\n%s", IsWSHandshakeRequest(r), string(headers))
 		}
 		i := &interceptor{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(i, r)
-		if l.LogSuccess || !(100 <= i.statusCode && i.statusCode < 400) {
+		if 100 <= i.statusCode && i.statusCode < 400 {
 			log.Infof("%s %s (%d) %s", r.Method, uri, i.statusCode, time.Since(begin))
+		} else {
+			log.Warnf("%s %s (%d) %s", r.Method, uri, i.statusCode, time.Since(begin))
 		}
 	})
 }
@@ -42,14 +43,7 @@ func (l Log) Wrap(next http.Handler) http.Handler {
 // Logging middleware logs each HTTP request method, path, response code and
 // duration for all HTTP requests.
 var Logging = Log{
-	LogSuccess:        true,
 	LogRequestHeaders: false,
-}
-
-// LogFailed middleware logs each HTTP request method, path, response code and
-// duration for non-2xx HTTP requests.
-var LogFailed = Log{
-	LogSuccess: false,
 }
 
 // interceptor implements WriteHeader to intercept status codes. WriteHeader
